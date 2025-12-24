@@ -59,10 +59,4 @@ with t2:
     st.button("📲 Envoyer Rappel WhatsApp")
 
 with t3:
-    st.subheader("Gestion du Staff")
-    st.session_state.staff_db = st.data_editor(st.session_state.staff_db, num_rows="dynamic", key="editor_staff", use_container_width=True)
-    st.button("💰 Notifier Salaires")
-
-with t4:
-    st.subheader("Détail des Dépenses")
-    st.session_state.expenses_db = st.data_editor(st.session_state.expenses_db, num_rows="dynamic", key="editor_exp", use_container_width=True)
+    st
