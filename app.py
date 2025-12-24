@@ -2,120 +2,67 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# --- CONFIGURATION DES CLÉS (Gardées précieusement) ---
+# --- CONFIGURATION ---
 ID_INSTANCE = "1101961689"
 API_TOKEN = "41e4cb90444f42a8b2ef21886432f2286ad973eefb1e45f3a8"
 
 st.set_page_config(page_title="Ludo Gold Management", layout="wide", page_icon="👑")
 
-# --- DESIGN "MOZART" (CSS PREMIUM) ---
+# --- DESIGN LUXE ---
 st.markdown("""
     <style>
     .stApp { background: linear-gradient(135deg, #020111 0%, #050b3a 100%); color: white; }
-    .stMetric { background: rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 15px; border: 1px solid #00f2fe; }
-    .main-header { font-size: 40px; font-weight: 800; background: -webkit-linear-gradient(#00f2fe, #4facfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; }
-    .stTabs [data-baseweb="tab-list"] { background-color: rgba(255, 255, 255, 0.05); border-radius: 20px; padding: 10px; }
-    .stTabs [data-baseweb="tab"] { color: #88c0d0; font-size: 16px; font-weight: 600; }
-    .stButton>button { width: 100%; border-radius: 50px; background: linear-gradient(90deg, #00f2fe 0%, #4facfe 100%); color: black; font-weight: bold; border: none; height: 45px; transition: 0.3s; }
-    .stButton>button:hover { transform: scale(1.05); box-shadow: 0 0 20px #00f2fe; }
-    /* Style pour les tableaux */
-    .stDataEditor { background-color: rgba(255,255,255,0.05); border-radius: 10px; }
+    [data-testid="stMetricValue"] { color: #00f2fe !important; font-weight: bold; }
+    .main-header { font-size: 35px; font-weight: 800; background: -webkit-linear-gradient(#00f2fe, #4facfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; margin-bottom: 20px; }
+    .stButton>button { width: 100%; border-radius: 50px; background: linear-gradient(90deg, #00f2fe 0%, #4facfe 100%); color: black; font-weight: bold; border: none; transition: 0.3s; }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 15px #00f2fe; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENTÊTE AVEC TON LOGO ---
-col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
-with col_logo2:
-    # Intégration de ton logo
-    st.image("https://i.ibb.co/v4S6Yf7/468888427-1244682499919526-1850707048973692228-n.jpg", use_container_width=True)
+# --- LOGO & TITRE ---
+col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
+with col_l2:
+    # Utilisation d'un lien plus stable pour ton logo
+    st.image("https://raw.githubusercontent.com/ilyesislembelaid-tech/ludo-creche/main/laludo.jpg", width=200)
     st.markdown('<p class="main-header">LUDO GOLD SYSTEM</p>', unsafe_allow_html=True)
 
-# --- INITIALISATION DES DONNÉES (Session State) ---
+# --- INITIALISATION ---
 if 'parents_db' not in st.session_state:
-    st.session_state.parents_db = pd.DataFrame([
-        {"Enfant": "Yanis", "Tel": "213550000000", "Montant": 25000, "Echeance": "2024-01-05", "Abonnement": "Mensuel"}
-    ])
-if 'staff_db' not in st.session_state:
-    st.session_state.staff_db = pd.DataFrame([
-        {"Nom": "Khadidja", "Poste": "Éducatrice", "Tel": "213770000000", "Salaire": 45000, "Date_Paie": 30}
-    ])
+    st.session_state.parents_db = pd.DataFrame([{"Enfant": "Yanis", "Tel": "213550000000", "Montant": 25000, "Statut": "Payé"}])
 if 'expenses_db' not in st.session_state:
     st.session_state.expenses_db = pd.DataFrame([
-        {"Catégorie": "Nutrition", "Détail": "Courses Hebdo", "Montant": 15000, "Date": "2023-12-25"},
-        {"Catégorie": "Electricité", "Détail": "Facture Sonelgaz", "Montant": 8000, "Date": "2023-12-20"},
-        {"Catégorie": "Gaz", "Détail": "Chauffage", "Montant": 4000, "Date": "2023-12-20"},
-        {"Catégorie": "Eau", "Détail": "ADE", "Montant": 2500, "Date": "2023-12-15"},
-        {"Catégorie": "Activités", "Détail": "Peinture & Jeux", "Montant": 6000, "Date": "2023-12-22"}
+        {"Catégorie": "Nutrition", "Montant": 15000},
+        {"Catégorie": "Électricité", "Montant": 8000},
+        {"Catégorie": "Gaz", "Montant": 4000},
+        {"Catégorie": "Eau", "Montant": 2500},
+        {"Catégorie": "Activités", "Montant": 6000}
     ])
 
-# --- NAVIGATION ---
-tabs = st.tabs(["📊 DASHBOARD GLOBAL", "👶 UNIVERS ENFANTS", "👥 GESTION ÉQUIPE", "💳 FLUX FINANCIERS", "🏥 SANTÉ & NOTES"])
+# --- ONGLETS ---
+t1, t2, t3, t4 = st.tabs(["📊 DASHBOARD", "👶 FAMILLES", "👥 ÉQUIPE", "📉 DÉPENSES"])
 
-# --- 1. DASHBOARD GLOBAL ---
-with tabs[0]:
+with t1:
     rev = st.session_state.parents_db['Montant'].sum()
-    salaires = st.session_state.staff_db['Salaire'].sum()
-    charges = st.session_state.expenses_db['Montant'].sum()
-    benefice = rev - (salaires + charges)
-
-    st.subheader("🚀 Analyse de Performance")
-    c1, c2, c3, c4 = st.columns(4)
+    exp = st.session_state.expenses_db['Montant'].sum()
+    c1, c2, c3 = st.columns(3)
     c1.metric("REVENUS", f"{rev:,} DA")
-    c2.metric("PAIES STAFF", f"-{salaires:,} DA")
-    c3.metric("CHARGES (EAU/GAZ/ETC)", f"-{charges:,} DA")
-    c4.metric("BÉNÉFICE NET", f"{benefice:,} DA")
+    c2.metric("CHARGES", f"{exp:,} DA")
+    c3.metric("BÉNÉFICE", f"{rev-exp:,} DA")
 
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        fig_pie = px.pie(st.session_state.expenses_db, values='Montant', names='Catégorie', 
-                         title="Où part l'argent ? (Répartition des charges)", hole=0.5)
-        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white")
-        st.plotly_chart(fig_pie, use_container_width=True)
-    with col_g2:
-        st.write("### 🧠 Diagnostic Intelligent")
-        if benefice > 0:
-            st.success(f"La crèche est rentable ce mois-ci ! Profit : {benefice:,} DA")
-        else:
-            st.error("Attention : Les dépenses dépassent les revenus !")
-        st.info(f"💡 Plus gros poste de dépense : {st.session_state.expenses_db.loc[st.session_state.expenses_db['Montant'].idxmax(), 'Catégorie']}")
+    fig = px.pie(st.session_state.expenses_db, values='Montant', names='Catégorie', hole=0.4, title="Analyse des Charges")
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white", showlegend=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-# --- 2. UNIVERS ENFANTS (Rappels WhatsApp) ---
-with tabs[1]:
-    st.subheader("👶 Gestion des Familles")
+with t2:
     st.session_state.parents_db = st.data_editor(st.session_state.parents_db, num_rows="dynamic", use_container_width=True)
-    
-    if st.button("📲 ENVOYER LES RAPPELS DE PAIEMENT (3 jours avant)"):
-        st.info("Recherche des échéances proches...")
-        # Ici on simule l'envoi WhatsApp via Green-API
-        st.success("WhatsApp activé : Les rappels ont été envoyés aux parents concernés !")
+    st.button("📲 Envoyer Rappels WhatsApp")
 
-# --- 3. GESTION ÉQUIPE ---
-with tabs[2]:
-    st.subheader("👥 Registre du Personnel")
-    st.session_state.staff_db = st.data_editor(st.session_state.staff_db, num_rows="dynamic", use_container_width=True)
-    
-    if st.button("💸 NOTIFIER L'ÉQUIPE (PAIE EFFECTUÉE)"):
-        st.balloons()
-        st.success("Confirmation de paiement envoyée par WhatsApp à toute l'équipe !")
+with t3:
+    staff = pd.DataFrame([{"Nom": "Khadidja", "Poste": "Directrice", "Salaire": 55000}])
+    st.data_editor(staff, num_rows="dynamic", use_container_width=True)
+    st.button("💰 Confirmer les Salaires")
 
-# --- 4. FLUX FINANCIERS DÉTAILLÉS ---
-with tabs[3]:
-    st.subheader("📉 Détail des Dépenses (Eau, Gaz, Nutrition, Activités)")
+with t4:
     st.session_state.expenses_db = st.data_editor(st.session_state.expenses_db, num_rows="dynamic", use_container_width=True)
-    
-    # Graphique d'évolution
-    fig_bar = px.bar(st.session_state.expenses_db, x='Date', y='Montant', color='Catégorie', title="Historique des frais")
-    fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-# --- 5. SANTÉ & NOTES ---
-with tabs[4]:
-    st.subheader("📝 Cahier de Liaison & Santé")
-    st.info("Espace pour noter les allergies, les médicaments ou les incidents.")
-    notes_db = pd.DataFrame([
-        {"Date": "2023-12-24", "Enfant": "Yanis", "Note": "Légère fièvre à midi", "Urgent": "Oui"},
-        {"Date": "2023-12-25", "Enfant": "Tous", "Note": "Prévoir goûter de Noël", "Urgent": "Non"}
-    ])
-    st.data_editor(notes_db, num_rows="dynamic", use_container_width=True)
