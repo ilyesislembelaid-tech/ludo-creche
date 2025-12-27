@@ -1,77 +1,114 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
-from datetime import datetime
+from datetime import datetime, timedelta
+import urllib.parse
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="Ludo Gold Interne", layout="wide")
+# --- CONFIGURATION ET THEME ---
+st.set_page_config(page_title="Ludo Gold Management", layout="wide", page_icon="👶")
 
+# CSS pour un look "Premium Crèche" (Doux mais moderne)
 st.markdown("""
     <style>
-    .stApp { background: #0e1117; color: white; }
-    [data-testid="stMetricValue"] { color: #00f2fe !important; }
-    .stButton>button { background: #00f2fe; color: black; border-radius: 10px; width: 100%; }
+    .stApp { background-color: #FDFCF0; color: #2C3E50; }
+    .main-header { font-size: 38px; font-weight: 800; color: #4facfe; text-align: center; margin-bottom: 20px; }
+    .metric-card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+    div[data-testid="stMetricValue"] { color: #4facfe; font-size: 28px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { background-color: #f0f2f6; border-radius: 10px; padding: 10px 20px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONNEXION GOOGLE SHEETS ---
-url = st.secrets["gsheets_url"]
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- CONNEXION BASE DE DONNÉES ---
+try:
+    url = st.secrets["gsheets_url"]
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except:
+    st.error("⚠️ Erreur de connexion au Google Sheets. Vérifiez les Secrets.")
+    st.stop()
 
-st.title("👑 LUDO GOLD : GESTION INTERNE")
+# Fonctions de lecture
+def get_data(sheet):
+    return conn.read(spreadsheet=url, worksheet=sheet, ttl=0)
 
-t1, t2, t3 = st.tabs(["👶 ENFANTS & PAIEMENTS", "🔌 CHARGES (GAZ/EAU/EDF)", "📊 BILAN"])
+# --- LOGIQUE WHATSAPP ---
+def send_wa(phone, message):
+    phone = str(phone).replace("+", "").replace(" ", "")
+    if not phone.startswith("213"): phone = "213" + phone # Défaut Algérie
+    encoded_msg = urllib.parse.quote(message)
+    return f"https://wa.me/{phone}?text={encoded_msg}"
 
-# --- ONGLET 1 : ENFANTS ---
-with t1:
-    st.subheader("Registre des Enfants")
-    try:
-        df_p = conn.read(spreadsheet=url, worksheet="Parents")
-        # Colonnes : Nom, Prénom, Age, Papa, Maman, Tel, Date_Paiement, Montant
-        edit_p = st.data_editor(df_p, num_rows="dynamic", use_container_width=True, key="p_edit")
+# --- NAVIGATION ---
+st.markdown('<p class="main-header">🌸 LUDO GOLD MANAGEMENT 🌸</p>', unsafe_allow_html=True)
+tabs = st.tabs(["🏠 DASHBOARD", "👶 ENFANTS & FAMILLES", "💰 PAIEMENTS", "📉 BUDGET & CHARGES", "⚙️ ADMIN"])
+
+# 1. DASHBOARD
+with tabs[0]:
+    df_p = get_data("Parents")
+    df_d = get_data("Dépenses")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("Effectif", len(df_p))
+    with col2: 
+        total_rev = pd.to_numeric(df_p["Montant"], errors='coerce').sum()
+        st.metric("Revenus Théoriques", f"{total_rev:,.0f} DA")
+    with col3:
+        total_exp = pd.to_numeric(df_d["Montant"], errors='coerce').sum()
+        st.metric("Total Dépenses", f"{total_exp:,.0f} DA")
+    with col4:
+        st.metric("Bénéfice Net", f"{(total_rev - total_exp):,.0f} DA")
+
+    st.divider()
+    c_left, c_right = st.columns(2)
+    with c_left:
+        fig_exp = px.pie(df_d, values='Montant', names='Catégorie', title="Répartition des Dépenses", hole=.4)
+        st.plotly_chart(fig_exp, use_container_width=True)
+    with c_right:
+        st.subheader("🔔 Alertes du jour")
+        today = datetime.now().date()
+        # Simulation d'alertes basées sur la colonne Date_Paiement
+        df_p['Date_DT'] = pd.to_datetime(df_p['Date_Paiement'], errors='coerce')
+        retards = df_p[df_p['Date_DT'].dt.day == today.day]
+        if not retards.empty:
+            for _, r in retards.iterrows():
+                st.warning(f"Paiement attendu aujourd'hui : {r['Prénom']} ({r['Montant']} DA)")
+
+# 2. GESTION DES ENFANTS
+with tabs[1]:
+    st.subheader("🗂️ Registre Complet")
+    df_p = get_data("Parents")
+    edited_p = st.data_editor(df_p, num_rows="dynamic", use_container_width=True, key="p_editor")
+    if st.button("💾 Sauvegarder les modifications (Enfants)"):
+        conn.update(spreadsheet=url, worksheet="Parents", data=edited_p)
+        st.success("Base de données mise à jour !")
+
+# 3. PAIEMENTS & WHATSAPP
+with tabs[2]:
+    st.subheader("💵 Suivi des mensualités")
+    df_pay = edited_p.copy()
+    
+    for index, row in df_pay.iterrows():
+        col_n, col_s, col_w = st.columns([2, 1, 2])
+        col_n.write(f"**{row['Prénom']} {row['Nom']}** ({row['Montant']} DA)")
+        status = col_s.selectbox("Statut", ["Payé", "En attente", "Retard"], key=f"status_{index}")
         
-        if st.button("💾 Enregistrer la liste des enfants"):
-            conn.update(spreadsheet=url, worksheet="Parents", data=edit_p)
-            st.success("Données sauvegardées ! ✅")
+        msg = f"Bonjour {row['Maman']}, rappel pour le paiement de {row['Prénom']} ({row['Montant']} DA). Merci de votre confiance ✨"
+        wa_url = send_wa(row['Tel'], msg)
+        col_w.markdown(f"[📩 Envoyer Rappel WhatsApp]({wa_url})")
 
-        # LOGIQUE RAPPEL AUTO
-        st.divider()
-        st.subheader("🔔 Rappels WhatsApp Automatiques")
-        today = datetime.now().strftime("%Y-%m-%d")
-        for index, row in edit_p.iterrows():
-            if str(row['Date_Paiement']) == today:
-                msg = f"Bonjour, c'est La Ludo Crèche. Un petit rappel pour le paiement de {row['Prénom']} aujourd'hui. Merci !"
-                tel = str(row['Tel']).replace("+", "")
-                link = f"https://wa.me/{tel}?text={msg.replace(' ', '%20')}"
-                st.warning(f"⚠️ PAIEMENT DÛ AUJOURD'HUI : {row['Prénom']} {row['Nom']}")
-                st.markdown(f"[📲 CLIQUER ICI POUR ENVOYER LE MESSAGE À {row['Prénom']}]({link})")
-    except:
-        st.info("Ajoutez les colonnes: Nom, Prénom, Age, Papa, Maman, Tel, Date_Paiement, Montant dans votre Sheets 'Parents'")
+# 4. BUDGET & CHARGES
+with tabs[3]:
+    st.subheader("📉 Gestion des Frais")
+    df_d = get_data("Dépenses")
+    edited_d = st.data_editor(df_d, num_rows="dynamic", use_container_width=True, key="d_editor")
+    if st.button("💾 Enregistrer les dépenses"):
+        conn.update(spreadsheet=url, worksheet="Dépenses", data=edited_d)
+        st.success("Charges enregistrées !")
 
-# --- ONGLET 2 : CHARGES ---
-with t2:
-    st.subheader("Gestion des Dépenses")
-    try:
-        df_d = conn.read(spreadsheet=url, worksheet="Dépenses")
-        # Colonnes : Catégorie (Gaz, Eau, Elec, Nutrition), Montant, Date
-        edit_d = st.data_editor(df_d, num_rows="dynamic", use_container_width=True, key="d_edit")
-        
-        if st.button("💾 Enregistrer les dépenses"):
-            conn.update(spreadsheet=url, worksheet="Dépenses", data=edit_d)
-            st.success("Dépenses mises à jour ! ✅")
-    except:
-        st.info("Ajoutez les colonnes: Catégorie, Montant, Date dans votre Sheets 'Dépenses'")
-
-# --- ONGLET 3 : BILAN ---
-with t3:
-    st.subheader("Bilan Financier")
-    try:
-        total_recettes = pd.to_numeric(edit_p["Montant"]).sum()
-        total_depenses = pd.to_numeric(edit_d["Montant"]).sum()
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("TOTAL REÇU", f"{total_recettes} DA")
-        c2.metric("TOTAL CHARGES", f"{total_depenses} DA")
-        c3.metric("RÉEL (NET)", f"{total_recettes - total_depenses} DA")
-    except:
-        st.write("Calcul impossible. Vérifiez les chiffres dans les tableaux.")
+# 5. ADMIN & MESSAGES PRESET
+with tabs[4]:
+    st.subheader("⚙️ Configuration des messages")
+    st.text_input("Message de bienvenue", "Bienvenue chez Ludo Gold ! Nous sommes ravis d'accueillir...")
+    st.text_area("Menu de la semaine", "Lundi : Purée de légumes...")
+    st.button("Mettre à jour les modèles de messages")
