@@ -1,4 +1,7 @@
 streamlit
 pandas
+gspread
+google-auth
+google-generativeai
+requests
 plotly
-st-gsheets-connection
