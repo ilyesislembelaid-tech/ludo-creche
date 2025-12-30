@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from gspread_streamlit import gspread_client
+import gspread
+from google.oauth2.service_account import Credentials
 import google.generativeai as genai
 import requests
 from datetime import datetime
@@ -17,13 +18,19 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. CONNECTIONS ---
-@st.cache_resource
+# --- 2. GOOGLE SHEETS CONNECTION (STABLE VERSION) ---
 def init_gsheet():
     try:
-        client = gspread_client.get_client(st.secrets["gcp_service_account"])
+        # Define scopes
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        
+        # Load credentials from Streamlit secrets
+        creds_dict = st.secrets["gcp_service_account"]
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        
+        # Authorize and open sheet
+        client = gspread.authorize(credentials)
         sh = client.open_by_url("https://docs.google.com/spreadsheets/d/1lYRd8k2Mv4_zmFruzCpepZJnhrqRvEm11bhulzHPibY/edit")
-        # Ensure this matches your tab name exactly
         return sh.worksheet("Feuille 1")
     except Exception as e:
         st.error(f"Connection Error: {e}")
@@ -33,7 +40,7 @@ ws = init_gsheet()
 
 # --- 3. APP LOGIC ---
 if ws:
-    # Load Data
+    # Fetch all data
     data = ws.get_all_records()
     df = pd.DataFrame(data)
 
@@ -44,8 +51,9 @@ if ws:
         st.title("📈 Executive Dashboard")
         col1, col2, col3 = st.columns(3)
         
-        total_revenue = df['Amount'].sum() if not df.empty else 0
-        overdue_count = len(df[df['Status'] == 'Overdue']) if not df.empty else 0
+        # Safe metric calculations
+        total_revenue = df['Amount'].sum() if not df.empty and 'Amount' in df.columns else 0
+        overdue_count = len(df[df['Status'] == 'Overdue']) if not df.empty and 'Status' in df.columns else 0
         
         col1.metric("Projected Revenue", f"{total_revenue} €")
         col2.metric("Overdue Payments", overdue_count)
@@ -57,7 +65,6 @@ if ws:
     elif menu == "Family Management":
         st.title("👨‍👩‍👧 Family Management")
         
-        # Table Editor
         if not df.empty:
             st.subheader("Current Records")
             edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
@@ -65,7 +72,6 @@ if ws:
                 ws.update([edited_df.columns.values.tolist()] + edited_df.values.tolist())
                 st.success("Database Updated!")
 
-        # Add New Form
         st.markdown("---")
         st.subheader("➕ Register New Child")
         with st.form("add_new_child"):
@@ -73,16 +79,15 @@ if ws:
             last_n = c1.text_input("Last Name")
             first_n = c1.text_input("First Name")
             age = c1.number_input("Age", 0, 10)
-            
             phone = c2.text_input("WhatsApp (e.g., 33600000000)")
             amount = c2.number_input("Monthly Fee", min_value=0)
             date = st.date_input("Due Date")
             
-            # THE FIXED LINE
             submit = st.form_submit_button("Add to System")
             
             if submit:
                 if last_n and phone:
+                    # Append new row to Google Sheet
                     ws.append_row([last_n, first_n, age, "", "", phone, str(date), amount, "Pending", ""])
                     st.success(f"Registered {first_n} successfully!")
                     st.rerun()
@@ -103,4 +108,4 @@ if ws:
                 st.warning("Please enter some cost data.")
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Lumina Executive v1.3")
+st.sidebar.caption("Lumina Executive v1.4")
