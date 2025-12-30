@@ -19,12 +19,9 @@ ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- CONNEXION GOOGLE SHEETS ---
 def get_worksheet():
-    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    # Utilise les identifiants stockés dans .streamlit/secrets.toml
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-    client = gspread.authorize(creds)
-    sh = client.open_by_url(SHEET_URL)
-    return sh.get_worksheet(0)
+    # ... connexion ...
+    sh = client.open_by_url("https://docs.google.com/spreadsheets/d/1lYRd8k2Mv4_zmFruzCpepZJnhrqRvEm11bhulzHPibY/edit")
+    return sh.worksheet("Feuille 1") # Utilise le nom détecté dans votre Drive
 
 # --- DESIGN FUTURISTE ---
 st.set_page_config(page_title="Lumina Executive", layout="wide")
