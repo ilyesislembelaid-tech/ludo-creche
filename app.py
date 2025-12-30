@@ -1,120 +1,88 @@
 import streamlit as st
 import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
+from gspread_streamlit import gspread_client
 import google.generativeai as genai
 import requests
-import plotly.express as px
 from datetime import datetime
 
 # --- CONFIGURATION ---
-GOOGLE_AI_KEY = "AIzaSyBfhCp3ZHcrajcfYDbzCqoIlv898iPLiKQ"
-GREEN_API_ID = "41e4cb90444f42a8"
-GREEN_API_TOKEN = "b2ef21886432f2286ad973eefb1e45f3a8"
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1PaX2JKScxAwnEVXUiKrB5fxvRdaxjjJFWa-kJ-i_e7g/edit"
+st.set_page_config(page_title="LUMINA EXECUTIVE", layout="wide")
 
-# Init Gemini AI
-genai.configure(api_key=GOOGLE_AI_KEY)
-ai_model = genai.GenerativeModel('gemini-1.5-flash')
-
-# --- CONNEXION GOOGLE SHEETS ---
-def get_worksheet():
-    # ... connexion ...
-    sh = client.open_by_url("https://docs.google.com/spreadsheets/d/1lYRd8k2Mv4_zmFruzCpepZJnhrqRvEm11bhulzHPibY/edit")
-    return sh.worksheet("Feuille 1") # Utilise le nom détecté dans votre Drive
-
-# --- DESIGN FUTURISTE ---
-st.set_page_config(page_title="Lumina Executive", layout="wide")
+# Futuristic Gold & Dark Theme
 st.markdown("""
     <style>
-    .stApp { background-color: #0E1117; color: white; }
-    [data-testid="stSidebar"] { background-color: #1A1C23; border-right: 1px solid #D4AF37; }
-    .stMetric { border: 1px solid #D4AF37; padding: 15px; border-radius: 10px; background: #1A1C23; }
-    h1, h2, h3 { color: #D4AF37 !important; }
-    .stButton>button { border: 1px solid #D4AF37; background: transparent; color: #D4AF37; width: 100%; transition: 0.3s; }
-    .stButton>button:hover { background: #D4AF37 !important; color: black !important; box-shadow: 0 0 15px #D4AF37; }
+    .main { background-color: #050a12; color: #e0e0e0; }
+    .stMetric { border: 1px solid #d4af37; padding: 20px; border-radius: 10px; background: #0a1424; }
+    h1, h2, h3 { color: #d4af37 !important; text-transform: uppercase; letter-spacing: 2px; }
+    .stButton>button { background-color: #d4af37; color: black; width: 100%; border-radius: 5px; font-weight: bold; }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-try:
-    worksheet = get_worksheet()
-    data = worksheet.get_all_records()
+# --- GOOGLE SHEETS CONNECTION ---
+def get_worksheet():
+    try:
+        client = gspread_client.get_client(st.secrets["gcp_service_account"])
+        # Use your specific sheet URL
+        sh = client.open_by_url("https://docs.google.com/spreadsheets/d/1lYRd8k2Mv4_zmFruzCpepZJnhrqRvEm11bhulzHPibY/edit")
+        return sh.worksheet("Feuille 1")
+    except Exception as e:
+        st.error(f"Connection Error: {e}")
+        return None
+
+ws = get_worksheet()
+
+# --- WHATSAPP SENDING FUNCTION ---
+def send_whatsapp(phone, parent, child, amount, date):
+    url = f"https://api.green-api.com/waInstance{st.secrets['api_keys']['green_api_id']}/sendMessage/{st.secrets['api_keys']['green_api_token']}"
+    message = f"Dear Mr/Ms {parent},\n\nPayment for {child} is due on {date}.\nAmount: {amount} €.\n\nThank you,\nLumina Nursery"
+    payload = {"chatId": f"{phone}@c.us", "message": message}
+    try:
+        response = requests.post(url, json=payload)
+        return response.status_code == 200
+    except:
+        return False
+
+# --- MAIN APP ---
+if ws:
+    data = ws.get_all_records()
     df = pd.DataFrame(data)
-
+    
     st.sidebar.title("🏛️ LUMINA ADMIN")
-    menu = st.sidebar.radio("Navigation", ["Dashboard", "Family Management", "Financial Analysis IA"])
+    menu = st.sidebar.selectbox("Navigation", ["Dashboard", "Family Management", "AI Finance"])
 
     if menu == "Dashboard":
-        st.title("✨ Executive Dashboard")
-        col1, col2, col3 = st.columns(3)
+        st.title("📊 Executive Dashboard")
+        c1, c2, c3 = st.columns(3)
         
-        # Calculs basés sur vos colonnes exactes
-        total_revenue = df['Montant'].sum() if 'Montant' in df.columns else 0
-        lates = len(df[df['Statut'] == 'En retard']) if 'Statut' in df.columns else 0
+        # Safe calculation of metrics
+        total = df['Amount'].sum() if not df.empty and 'Amount' in df.columns else 0
+        overdue = len(df[df['Status'] == 'Overdue']) if not df.empty and 'Status' in df.columns else 0
         
-        col1.metric("TOTAL REVENUE", f"{total_revenue} €")
-        col2.metric("TOTAL CHILDREN", len(df))
-        col3.metric("LATE PAYMENTS", lates)
-
-        st.write("### 📊 Revenue Breakdown")
-        if 'Statut' in df.columns:
-            fig = px.pie(df, names='Statut', values='Montant', hole=0.5,
-                         color_discrete_map={'Payé':'#D4AF37', 'En attente':'#E5E4E2', 'En retard':'#FF4B4B'})
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white")
-            st.plotly_chart(fig, use_container_width=True)
+        c1.metric("Total Revenue", f"{total} €")
+        c2.metric("Overdue Payments", overdue)
+        c3.metric("Total Children", len(df))
+        
+        st.subheader("📋 Registry Overview")
+        st.dataframe(df, use_container_width=True)
 
     elif menu == "Family Management":
-        st.title("👨‍👩‍👧 Family Database")
-        # Édition directe du tableau
-        edited_df = st.data_editor(df, num_rows="dynamic", key="family_editor")
+        st.title("👨‍👩‍👧 Family Management")
         
-        if st.button("💾 Sync with Google Sheets"):
-            clean_df = edited_df.fillna("")
-            worksheet.update([clean_df.columns.values.tolist()] + clean_df.values.tolist())
-            st.success("Google Sheets successfully updated!")
-
-        st.divider()
-        st.subheader("📲 WhatsApp Automated Reminders")
-        if st.button("🚀 Run Reminder Campaign (J-3)"):
-            today = datetime.now().date()
-            sent_count = 0
-            
-            for _, row in edited_df.iterrows():
-                try:
-                    due_date = pd.to_datetime(row['Date_Paiement']).date()
-                    # Si la date est dans moins de 3 jours et non payé
-                    if 0 <= (due_date - today).days <= 3 and row['Statut'] != "Payé":
-                        phone = str(row['Tel']).replace("+", "").strip()
-                        parent = row['Papa'] if row['Papa'] else row['Maman']
-                        
-                        message = (f"Hello Mr/Ms {parent},\n\n"
-                                   f"This is a reminder that the payment for *{row['Prénom']}* is due on *{due_date}*.\n"
-                                   f"Amount: *{row['Montant']} €*.\n\n"
-                                   f"Thank you for your trust.\nLumina Nursery ✨")
-                        
-                        url = f"https://api.green-api.com/waInstance{GREEN_API_ID}/sendMessage/{GREEN_API_TOKEN}"
-                        requests.post(url, json={"chatId": f"{phone}@c.us", "message": message})
-                        sent_count += 1
-                        st.write(f"✅ Reminder sent to {parent} ({row['Prénom']})")
-                except:
-                    continue
-            st.success(f"Campaign finished: {sent_count} messages sent.")
-
-    elif menu == "Financial Analysis IA":
-        st.title("💎 AI Expense Auditor")
-        col_a, col_b = st.columns(2)
-        elec = col_a.number_input("Electricity", 0)
-        food = col_a.number_input("Food & Nutrition", 0)
-        gas = col_b.number_input("Gas", 0)
-        staff = col_b.number_input("Staff Salaries", 0)
+        # Edit existing data
+        if not df.empty:
+            edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+            if st.button("Sync with Google Sheets"):
+                ws.update([edited_df.columns.values.tolist()] + edited_df.values.tolist())
+                st.success("Database Updated!")
         
-        if st.button("Generate AI Insight"):
-            prompt = (f"Act as a professional financial auditor for a luxury nursery. "
-                      f"Analyze these expenses: Electricity {elec}, Food {food}, Gas {gas}, Staff {staff}. "
-                      f"Provide a brief summary and 3 tips to reduce costs in English.")
-            response = ai_model.generate_content(prompt)
-            st.info(response.text)
-
-except Exception as e:
-    st.error(f"Configuration Error: {e}")
-    st.info("Ensure your Google Sheet headers match: Nom, Prénom, Age, Papa, Maman, Tel, Date_Paiement, Montant, Statut")
+        # Add new family
+        with st.expander("➕ Register New Child"):
+            with st.form("add_form"):
+                col1, col2 = st.columns(2)
+                ln = col1.text_input("Last Name")
+                fn = col1.text_input("First Name")
+                ph = col2.text_input("Phone (e.g. 33612345678)")
+                am = col2.number_input("Monthly Fee", min_value=0)
+                dt = st.date_input("Due Date")
+                
+                if st.form_submit_button("Add
