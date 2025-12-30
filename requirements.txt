@@ -1,7 +1,5 @@
 streamlit
 pandas
-gspread
-google-auth
+gspread-streamlit
 google-generativeai
 requests
-plotly
