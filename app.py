@@ -3,86 +3,80 @@ import pandas as pd
 from gspread_streamlit import gspread_client
 import google.generativeai as genai
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# --- CONFIGURATION ---
+# --- SETTINGS & UI ---
 st.set_page_config(page_title="LUMINA EXECUTIVE", layout="wide")
 
-# Futuristic Gold & Dark Theme
 st.markdown("""
     <style>
-    .main { background-color: #050a12; color: #e0e0e0; }
-    .stMetric { border: 1px solid #d4af37; padding: 20px; border-radius: 10px; background: #0a1424; }
-    h1, h2, h3 { color: #d4af37 !important; text-transform: uppercase; letter-spacing: 2px; }
-    .stButton>button { background-color: #d4af37; color: black; width: 100%; border-radius: 5px; font-weight: bold; }
+    .main { background-color: #050a12; color: #ffffff; }
+    .stMetric { border: 1px solid #d4af37; background-color: #0a1424; padding: 20px; border-radius: 10px; }
+    h1, h2, h3 { color: #d4af37 !important; text-transform: uppercase; }
+    .stButton>button { background-color: #d4af37; color: black; font-weight: bold; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- GOOGLE SHEETS CONNECTION ---
-def get_worksheet():
-    try:
-        client = gspread_client.get_client(st.secrets["gcp_service_account"])
-        # Use your specific sheet URL
-        sh = client.open_by_url("https://docs.google.com/spreadsheets/d/1lYRd8k2Mv4_zmFruzCpepZJnhrqRvEm11bhulzHPibY/edit")
-        return sh.worksheet("Feuille 1")
-    except Exception as e:
-        st.error(f"Connection Error: {e}")
-        return None
+# --- CONNECTIONS ---
+def init_gsheet():
+    client = gspread_client.get_client(st.secrets["gcp_service_account"])
+    sh = client.open_by_url("https://docs.google.com/spreadsheets/d/1lYRd8k2Mv4_zmFruzCpepZJnhrqRvEm11bhulzHPibY/edit")
+    return sh.worksheet("Feuille 1")
 
-ws = get_worksheet()
+ws = init_gsheet()
+df = pd.DataFrame(ws.get_all_records())
 
-# --- WHATSAPP SENDING FUNCTION ---
-def send_whatsapp(phone, parent, child, amount, date):
-    url = f"https://api.green-api.com/waInstance{st.secrets['api_keys']['green_api_id']}/sendMessage/{st.secrets['api_keys']['green_api_token']}"
-    message = f"Dear Mr/Ms {parent},\n\nPayment for {child} is due on {date}.\nAmount: {amount} €.\n\nThank you,\nLumina Nursery"
-    payload = {"chatId": f"{phone}@c.us", "message": message}
+# --- WHATSAPP ENGINE ---
+def send_reminder(phone, parent, child, amount, date):
+    id_ins = st.secrets["api_keys"]["green_api_id"]
+    token = st.secrets["api_keys"]["green_api_token"]
+    url = f"https://api.green-api.com/waInstance{id_ins}/sendMessage/{token}"
+    
+    text = f"Hello {parent},\n\nThis is a reminder for {child}'s nursery payment.\nDate: {date}\nAmount: {amount}€.\n\nThank you, Lumina Nursery."
+    payload = {"chatId": f"{phone}@c.us", "message": text}
     try:
-        response = requests.post(url, json=payload)
-        return response.status_code == 200
+        res = requests.post(url, json=payload)
+        return res.status_code == 200
     except:
         return False
 
-# --- MAIN APP ---
-if ws:
-    data = ws.get_all_records()
-    df = pd.DataFrame(data)
+# --- APP MENU ---
+st.sidebar.title("🏛️ LUMINA ADMIN")
+choice = st.sidebar.radio("Navigation", ["Dashboard", "Families", "AI Financials"])
+
+if choice == "Dashboard":
+    st.title("📈 Executive Overview")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Expected Revenue", f"{df['Amount'].sum() if not df.empty else 0} €")
+    c2.metric("Overdue", len(df[df['Status'] == 'Overdue']) if not df.empty else 0)
+    c3.metric("Total Kids", len(df))
     
-    st.sidebar.title("🏛️ LUMINA ADMIN")
-    menu = st.sidebar.selectbox("Navigation", ["Dashboard", "Family Management", "AI Finance"])
+    st.subheader("WhatsApp Automation")
+    if st.button("🚀 Send Reminders for Payments in 3 days"):
+        today = datetime.now()
+        count = 0
+        for i, row in df.iterrows():
+            due_date = datetime.strptime(str(row['Due_Date']), '%Y-%m-%d')
+            # Check 3 days before and if not already sent
+            if (due_date - today).days <= 3 and row['Status'] != 'Paid' and not row['Last_Reminder']:
+                if send_reminder(row['Phone'], row['Father_Name'], row['First_Name'], row['Amount'], row['Due_Date']):
+                    ws.update_cell(i + 2, 10, today.strftime('%Y-%m-%d'))
+                    count += 1
+        st.success(f"Sent {count} reminders successfully.")
 
-    if menu == "Dashboard":
-        st.title("📊 Executive Dashboard")
-        c1, c2, c3 = st.columns(3)
-        
-        # Safe calculation of metrics
-        total = df['Amount'].sum() if not df.empty and 'Amount' in df.columns else 0
-        overdue = len(df[df['Status'] == 'Overdue']) if not df.empty and 'Status' in df.columns else 0
-        
-        c1.metric("Total Revenue", f"{total} €")
-        c2.metric("Overdue Payments", overdue)
-        c3.metric("Total Children", len(df))
-        
-        st.subheader("📋 Registry Overview")
-        st.dataframe(df, use_container_width=True)
+elif choice == "Families":
+    st.title("👨‍👩‍👧 Family Management")
+    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+    if st.button("Sync Database"):
+        ws.update([edited_df.columns.values.tolist()] + edited_df.values.tolist())
+        st.toast("Saved!")
 
-    elif menu == "Family Management":
-        st.title("👨‍👩‍👧 Family Management")
-        
-        # Edit existing data
-        if not df.empty:
-            edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-            if st.button("Sync with Google Sheets"):
-                ws.update([edited_df.columns.values.tolist()] + edited_df.values.tolist())
-                st.success("Database Updated!")
-        
-        # Add new family
-        with st.expander("➕ Register New Child"):
-            with st.form("add_form"):
-                col1, col2 = st.columns(2)
-                ln = col1.text_input("Last Name")
-                fn = col1.text_input("First Name")
-                ph = col2.text_input("Phone (e.g. 33612345678)")
-                am = col2.number_input("Monthly Fee", min_value=0)
-                dt = st.date_input("Due Date")
-                
-                if st.form_submit_button("Add
+elif choice == "AI Financials":
+    st.title("💰 AI Cost Analyzer")
+    genai.configure(api_key=st.secrets["api_keys"]["gemini"])
+    model = genai.GenerativeModel('gemini-pro')
+    
+    costs = st.text_area("Enter monthly expenses (e.g. Electricity 200, Food 500)")
+    if st.button("Analyze with Gemini"):
+        resp = model.generate_content(f"Analyze these expenses and give 3 tips in English: {costs}")
+        st.markdown(resp.text)
